@@ -1,0 +1,149 @@
+####################################################################################################
+#  This application was run using:
+####################################################################################################
+1. ruby 1.9.2
+2. Gems used: rspec2. Installing the rspec gem (version 2.6.0) is required if you want to run tests. 
+If you have RVM (see https://rvm.beginrescueend.com) and the bundler gem installed, run "bundle install" 
+from the command line. Otherwise just run "gem install rspec" from the command line.
+3. To run tests simply type "rake" at the command line.
+4. To run the app type "ruby world.rb" at the command line.
+Note: I took the liberty of adding a .rvmrc file to create a levenshtein gemset against ruby 1.9.2-head 
+version - so it doesn't intefere with any existing gemsets. If you don't have rvm, it should not 
+intefere with running the app or tests.
+
+####################################################################################################
+#  Execution time
+####################################################################################################
+Benchmarking: It took ~19seconds (loading the population + building connections + counting nodes for 
+causes). The code was run on OSX with a 2.4GHz Dual Core processor. Execution time depends on other 
+cpu/memory hogging applications running at the same time. .
+
+####################################################################################################
+#  Approach used
+####################################################################################################
+1. Load the population: Load the entire population into a hash of hashes with each sub-hash holding 
+words of the same length.
+2. Build connections: iterate through the words in each sub-hash (or level) and add friends.
+3. Walk and count: Once connections are built, use "causes" as an input, walk the network and count 
+the number of nodes.
+
+Keeping the base problem in mind i.e. to solve for a Levenshtein distance of 1 meant finding each word's 
+children (a distance of 1 char less), siblings ( substitution of 1 char) and parents (1 char more).
+
+* Finding children is straightforward as a word of length S can have at most S children. For example 
+children of the word causes would be: auses, cuses, cases, caues, causs, cause, which could be simply 
+looked up in the hash for words of length 5. Thus finding children can be reduced to creating S possible 
+words and looking them up among the words of length S-1.
+
+* Finding siblings is a little less straightforward, but is similar to finding children. Two siblings will 
+always have a child in common by eliminating the character that is different. However, the index position 
+at which the character is eliminated is important, as "causes" and "abuses" have a child "auses", but 
+are not siblings. On the other hand, "causes" and "pauses" have "auses" as a child and are siblings. 
+This means, siblings can be found using a children list, memorizing the position of the character eliminated, 
+and connecting words with the same child. For example: one possible substitution of causes is *auses 
+where * = any letter from a-z. Therefore, the hash for level 6 would contain {"auses1" => "causes"} - 
+where 1 is the index position of the letter substituted and the value is the word. (Technically it 
+holds the Node object for that word, but here I just use the word for simplicity). So the hash for causes 
+would look like this:
+{"auses1" => "causes",
+"cuses2" => "causes",
+"cases3" => "causes",
+"caues4" => "causes",
+"causs5" => "causes",
+"cause6" => "causes"}
+
+Pretend the word causes has already been processed and the hash is loaded as above. Now when the iteration 
+comes up against the word "pauses", it creates the word substitution combination below. The hash for pauses 
+would look like this:
+{"auses1" => "pauses",
+"puses2" =>  "pauses",
+"pases3" =>  "pauses",
+"paues4" =>  "pauses",
+"pauss5" =>  "pauses",
+"pause6" =>  "pauses"}
+
+Except instead of adding the key "auses1" that already exists, we found a sibling of "pauses" with a 
+Levenshtein distance of 1 and connect it with "causes".
+
+One the other hand, "abuses" will create "auses2", which will not match "auses1", and therefore not be 
+linked to causes -  which is correct, as the Levenshtein distance of "causes" and "abuses" is greater 
+than one. It is worth noting that the above approach is more performant than iterating from a-z, 
+substituting the respective index position character for each letter in the alphabet and then checking 
+if the word exists in the population. The latter would take anywhere from S to S*26 iterations, where 
+S is the length of the string; whereas the above approach would take at most S iterations.
+
+** What about parent nodes?  Finding parent word combinations is the hardest puzzle to solve since it is 
+expensive to guess what the parent of a word should be. Given there are 26 letters in the alphabet,
+ if a word is S letters long, that would make 26*S parent word combinations (times 260,000 words).  
+We can get around this by building connections starting with the queue of longest words, finding siblings 
+and children and then moving one level down and repeating. Thus we get the parents for free through 
+finding the children.
+
+* Networks and Nodes: Each word is saved as a node object. When the population hash is loaded for the 
+first time each word is converted into a node representing the word. Each node has an attribute called 
+first_degree_friends to which it adds any children/siblings it runs across once connection building starts. 
+Each time a node is added as a friend, it is doubly linked (see the add_friend method in the Node class). 
+The reason for a two way link is to be able to walk the network from any node and not to end up at dead ends.
+
+* Walking the network: This is basically walking a double linked list. To make sure each node is 
+counted once and to avoid circular traversals, an attribute on each node called "touched" is set 
+to 1 if the node is counted.
+
+Computational time: The complexity of the above algorithm is O(P+N) = O(P) (N <= P) where P = size of 
+the population and N = size of network versus O(P*N) = O(P^2) (N <= P) when iterating through the network. 
+Processing the population as above costs less than the computational sum of loading the population and 
+then iterating through each word in the network to find friends of a specific word. 
+
+####################################################################################################
+# Little optimizations applied along the way:
+####################################################################################################
+1. Network scans only need to be applied if there is the possibility of finding siblings/children/parents.
+That means, if a word is the only one in its level and there are no words in the level below it or in 
+the level above it, then there's no possibility of finding friends. If so, constructing all possible 
+child word combinations is useless. 
+2. Only add sibling word matches to the hash. Adding child word combinations is a waste, as children 
+can be directly looked up in the base population (also in a hash).
+3. Clearing the hash after processing all words at each level shaved off another second. The assumption 
+is that it reduces the amount of memory operations (clearing keys vs. deleting the old hash and 
+allocating a new hash object).
+
+####################################################################################################
+# Initial approaches used:
+####################################################################################################
+1. Finding friends recursively - The problem statement itself suggested this. However, due to the 
+size of the network the stack went belly up at 2187 levels deep. That meant the next approach would 
+be iteration.
+2. Finding friends iteratively - The first iterative approach checked each word against the base 
+population to see if a parent/child/sibling existed that had not been already added to the network of the 
+word "causes". This was first tested against a smaller dataset of 65000 and it ran in 1 hour, 20 minutes 
+with a network size of about 16,000. However, when running against the full population, it ran for 8+ hrs 
+suggesting a plain iterative solution was inadequate. A closer look at the algorithm revealed that it would 
+take N*P or ~20 Billion operations (260K * 78K).  Clearly I needed to reduce the size of the datasets.
+3. Splitting the dataset - The most obvious way was to organize the data by length. Using the same algorithm 
+as above (with a few optimizations), I was able to get a run time of ~67 minutes. However, I noticed that 
+some of the datasets were quite large e.g. the population of words of length 8 was ~39K. I further split this
+into a hash of starts_with/ends_with parts so that it contained every possilbe string split for each word. The 
+popluation hash start_with/ends_with for causes would look like this:
+{:starts_with => {"c" => ["causes"], "ca" => ["causes"], "cau" => ["causes"], "caus" => ["causes"], "cause" => ["causes"]},
+:ends_with => {"auses" => ["causes"], "uses" => ["causes"], "ses" => ["causes"], "es" => ["causes"], "s" => ["causes"]}}
+
+Then I could split my input string into half like so: "cau"/"ses" for even strings or "ca"/"use" for odd strings. 
+Then all that was required was looking up strings that matched the first/last half of the input string and iterating
+through those. The idea was to do as few iterations as possible since hash lookups are much cheaper than iterating through 
+arrays. This approach got the run time down 480 seconds or 8 minutes.
+4. The problem still was that this type of algorithm had a complexity of P*N where P = size of population 
+and N = size of the network (or P’ * N where P’ = f(P) = reduced size of population (after organizing 
+by length/word splits etc.)). That means as the population gets bigger, the network is likely to get bigger, 
+which means the computational time will grow quadratically rather than linearly. This led to the final 
+solution, which does not depend on the network size. It is also worth noting that the final solution 
+yields every possible network in the population, and can be easily scaled to processing word-length-queues 
+in parallel since finding friends at each level is independent of others.
+
+####################################################################################################
+# Language of choice: ruby. Why?
+####################################################################################################
+1. Concise : ruby lets me use as little code as possible. As a case in point consider: 
+self.citizens.keys.sort.reverse (in Population.build_connnections).
+2. IRB - since it's interpreter-based, I can test as much or as little of my code right away.
+3. Dynamic class loading - if I want to add a method to a class, I can simply extend it and add the method I want.
+4. Easy to use testing framework.
