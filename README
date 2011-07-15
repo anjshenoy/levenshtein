@@ -14,9 +14,9 @@ rspec2. If you don't have rvm, it should not intefere with running the app or te
 ####################################################################################################
 #  Execution time
 ####################################################################################################
-Benchmarking: It took ~19seconds (loading the population + building connections + counting nodes for 
+This application took ~19seconds (loading the population + building connections + counting nodes for 
 causes). The code was run on OSX with a 2.4GHz Dual Core processor. Execution time depends on other 
-cpu/memory hogging applications running at the same time. .
+cpu/memory hogging applications running at the same time.
 
 ####################################################################################################
 #  Approach used
