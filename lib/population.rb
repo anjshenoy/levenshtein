@@ -16,6 +16,7 @@ class Population
     hash = {}
 
     self.citizens.keys.sort.reverse.each{|len|
+      start_time = Time.now
       #possibility of at least one (sibling || child || parent)
       if self.citizens[len].size > 1 || has_words_in?(len-1) || has_words_in?(len+1)
         self.citizens[len].each_pair {|word, node|
@@ -34,6 +35,7 @@ class Population
         }
       end
       hash.clear
+      puts "Time for level #{len}: #{Time.now - start_time}"
     }
   end
 
