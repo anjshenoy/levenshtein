@@ -15,10 +15,6 @@ describe Node do
     n.first_degree_friends.should == []
   end
 
-  it "does not allow me to change the name (i.e. identifier)of the node once set" do
-    lambda{n.name = "something else"}.should raise_error(NoMethodError, /^undefined method `name='/)
-  end
-
   context "child word combinations are defined by"do
     it "all possible words with one character less than the name attribute" do
       n.child_word_list.should == ["ake", "cke", "cae", "cak"]

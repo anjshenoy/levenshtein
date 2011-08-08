@@ -5,7 +5,6 @@ class Node
   def initialize(word)
     @name = word
     @first_degree_friends = []
-    @name.freeze
     @touched = 0
   end
 
